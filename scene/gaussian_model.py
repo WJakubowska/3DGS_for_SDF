@@ -22,10 +22,10 @@ from simple_knn._C import distCUDA2
 from utils.graphics_utils import BasicPointCloud
 from utils.general_utils import strip_symmetric, build_scaling_rotation
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../permuto_sdf/permuto_sdf_py/models')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../PermutoSDF/permuto_sdf_py/models')))
 from models import SDF
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../permuto_sdf/permuto_sdf_py/utils')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../PermutoSDF/permuto_sdf_py/utils')))
 from common_utils import create_bb_for_dataset
 
 
@@ -51,7 +51,7 @@ class GaussianModel:
         self.rotation_activation = torch.nn.functional.normalize
         aabb = create_bb_for_dataset('nerf')
         self.sdf = SDF(in_channels=3, boundary_primitive=aabb, geom_feat_size_out=32, nr_iters_for_c2f=10000*1.0).to("cuda")
-        self.sdf.load_state_dict(torch.load('/workspace/gaussian-splatting/scene/sdf_model.pt'))
+        self.sdf.load_state_dict(torch.load('/workspace/3DGS_for_SDF/scene/sdf_model.pt'))
         self.sdf.eval()
         self.beta = nn.Parameter(torch.tensor(10.00))
         
