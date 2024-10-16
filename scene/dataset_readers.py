@@ -242,6 +242,7 @@ def readNerfSyntheticInfo(path, white_background, eval, extension=".png", init_p
             sdf = SDF(in_channels=3, boundary_primitive=aabb, geom_feat_size_out=32, nr_iters_for_c2f=10000*1.0).to("cuda")
             sdf.load_state_dict(torch.load('/workspace/3DGS_for_SDF/scene/sdf_model.pt'))
             sdf.eval()
+            num_pts = 100_000
             xyz = torch.tensor(np.random.random((num_pts, 3)) - 0.5).float().to("cuda")
             with torch.no_grad():
                 sdf_results = sdf(xyz, 200000)[0]
