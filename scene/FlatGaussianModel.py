@@ -133,7 +133,7 @@ class FlatGaussianModel(GaussianModel):
             for i in range(triangles.shape[0]):
                 f.write(f"f {3*i+1} {3*i+2} {3*i+3}\n")
     
-    def scalculate_loss_from_sdf(self):
+    def calculate_loss_from_sdf(self):
         triangles =  self.prepare_triangles()
         v1 = triangles[:, 0]
         gaussian_center = v1
