@@ -23,11 +23,11 @@ from plyfile import PlyData, PlyElement
 from utils.sh_utils import SH2RGB
 from scene.gaussian_model import BasicPointCloud
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../PermutoSDF/permuto_sdf_py/models')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../permuto_sdf/permuto_sdf_py/models')))
 from models import SDF
 import torch
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../PermutoSDF/permuto_sdf_py/utils')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../permuto_sdf/permuto_sdf_py/utils')))
 from common_utils import create_bb_for_dataset
 
 class CameraInfo(NamedTuple):
@@ -240,7 +240,7 @@ def readNerfSyntheticInfo(path, white_background, eval, extension=".png", init_p
         if init_ply_from_sdf:
             aabb = create_bb_for_dataset('nerf')
             sdf = SDF(in_channels=3, boundary_primitive=aabb, geom_feat_size_out=32, nr_iters_for_c2f=10000*1.0).to("cuda")
-            sdf.load_state_dict(torch.load('/workspace/3DGS_for_SDF/scene/sdf_model.pt'))
+            sdf.load_state_dict(torch.load('/workspace/permuto_sdf/checkpoints/permuto_sdf_lego_default/200000/models/sdf_model.pt'))
             sdf.eval()
             num_pts = 100_000
             xyz = torch.tensor(np.random.random((num_pts, 3)) - 0.5).float().to("cuda")
