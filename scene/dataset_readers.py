@@ -30,7 +30,7 @@ import torch
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../permuto_sdf/permuto_sdf_py/utils')))
 from common_utils import create_bb_for_dataset
 
-import trimesh
+
 
 class CameraInfo(NamedTuple):
     uid: int
@@ -68,12 +68,11 @@ def getNerfppNorm(cam_info):
         cam_centers.append(C2W[:3, 3:4])
 
     center, diagonal = get_center_and_diag(cam_centers)
-    print("Center i diagonal: ", center, diagonal)
+    
     radius = diagonal * 1.1
 
     translate = -center
-    points_mesh = trimesh.PointCloud(vertices=np.hstack(cam_centers).T)
-    points_mesh.export("centers_cam_sfera_0_5.ply")
+
     return {"translate": translate, "radius": radius}
 
 def readColmapCameras(cam_extrinsics, cam_intrinsics, images_folder):

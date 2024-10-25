@@ -126,7 +126,6 @@ class GaussianModel:
 
     def SDF_to_opacity(self, f_x):
         numerator = torch.exp(-self.beta * f_x)
-        # print(self.beta)
         denominator = (1 + numerator) ** 2
         opacity = ( numerator / denominator  ) * 4
         return opacity 
@@ -376,7 +375,6 @@ class GaussianModel:
         selected_pts_mask = torch.where(padded_grad >= grad_threshold, True, False)
         selected_pts_mask = torch.logical_and(selected_pts_mask,
                                               torch.max(self.get_scaling, dim=1).values > self.percent_dense*scene_extent)
-        # print("densify_and_split ", torch.sum(selected_pts_mask))
         stds = self.get_scaling[selected_pts_mask].repeat(N,1)
         means =torch.zeros((stds.size(0), 3),device="cuda")
         samples = torch.normal(mean=means, std=stds)
@@ -397,13 +395,10 @@ class GaussianModel:
     def densify_and_clone(self, grads, grad_threshold, scene_extent):
         # Extract points that satisfy the gradient condition
         selected_pts_mask = torch.where(torch.norm(grads, dim=-1) >= grad_threshold, True, False)
-        # print("SELECTED 1: ", selected_pts_mask.shape)
         selected_pts_mask = torch.logical_and(selected_pts_mask,
                                               torch.max(self.get_scaling, dim=1).values <= self.percent_dense*scene_extent)
-        # print("SELECTED: ", selected_pts_mask.shape)
-        # print(selected_pts_mask.sum)
+
         new_xyz = self._xyz[selected_pts_mask]
-        # print("new xyz: ", new_xyz.shape)
         new_features_dc = self._features_dc[selected_pts_mask]
         new_features_rest = self._features_rest[selected_pts_mask]
         

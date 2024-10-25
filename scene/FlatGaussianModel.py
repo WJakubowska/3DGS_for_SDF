@@ -66,12 +66,10 @@ class FlatGaussianModel(GaussianModel):
         padded_grad = torch.zeros((n_init_points), device="cuda")
         padded_grad[:grads.shape[0]] = grads.squeeze()
         selected_pts_mask = torch.where(padded_grad >= grad_threshold, True, False)
-        # print("Selected_pts_mask 1: ", selected_pts_mask.shape)
         selected_pts_mask = torch.logical_and(
             selected_pts_mask,
             torch.max(self.get_scaling, dim=1).values > self.percent_dense*scene_extent
         )
-        # print("Selected_pts_mask 2: ", selected_pts_mask.shape)
         stds = self.get_scaling[selected_pts_mask].repeat(N,1)
         means =torch.zeros((stds.size(0), 3),device="cuda")
         samples = torch.normal(mean=means, std=stds)
