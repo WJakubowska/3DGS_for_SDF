@@ -52,7 +52,7 @@ class GaussianModel:
 
         aabb = create_bb_for_dataset('nerf')
         self.sdf = SDF(in_channels=3, boundary_primitive=aabb, geom_feat_size_out=32, nr_iters_for_c2f=10000*1.0).to("cuda")
-        self.sdf.load_state_dict(torch.load('/workspace/permuto_sdf/checkpoints/permuto_sdf_hotdog_default/200000/models/sdf_model.pt'))
+        self.sdf.load_state_dict(torch.load('/workspace/permuto_sdf/checkpoints/permuto_sdf_lego_default/200000/models/sdf_model.pt'))
         self.sdf.eval()
         self.beta = nn.Parameter(torch.tensor(10.00), requires_grad=True)
         

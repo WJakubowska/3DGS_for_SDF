@@ -58,7 +58,6 @@ class FlatGaussianModel(GaussianModel):
         self._features_rest = nn.Parameter(features[:, :, 1:].transpose(1, 2).contiguous().requires_grad_(True))
         self._scaling = nn.Parameter(scales.requires_grad_(True))
         self._rotation = nn.Parameter(rots.requires_grad_(True))
-        # self._opacity = nn.Parameter(opacities.requires_grad_(True))
         self.max_radii2D = torch.zeros((self.get_xyz.shape[0]), device="cuda")
 
     def densify_and_split(self, grads, grad_threshold, scene_extent, N=2):
@@ -67,10 +66,12 @@ class FlatGaussianModel(GaussianModel):
         padded_grad = torch.zeros((n_init_points), device="cuda")
         padded_grad[:grads.shape[0]] = grads.squeeze()
         selected_pts_mask = torch.where(padded_grad >= grad_threshold, True, False)
+        # print("Selected_pts_mask 1: ", selected_pts_mask.shape)
         selected_pts_mask = torch.logical_and(
             selected_pts_mask,
             torch.max(self.get_scaling, dim=1).values > self.percent_dense*scene_extent
         )
+        # print("Selected_pts_mask 2: ", selected_pts_mask.shape)
         stds = self.get_scaling[selected_pts_mask].repeat(N,1)
         means =torch.zeros((stds.size(0), 3),device="cuda")
         samples = torch.normal(mean=means, std=stds)
@@ -82,7 +83,7 @@ class FlatGaussianModel(GaussianModel):
         new_rotation = self._rotation[selected_pts_mask].repeat(N, 1)
         new_features_dc = self._features_dc[selected_pts_mask].repeat(N, 1, 1)
         new_features_rest = self._features_rest[selected_pts_mask].repeat(N, 1, 1)
-        new_opacity = self.sdf(new_xyz, 200000)[0].repeat(N,1)
+        new_opacity = torch.zeros(new_xyz.shape[0]).repeat(N,1)
         self.densification_postfix(new_xyz, new_features_dc, new_features_rest, new_opacity, new_scaling, new_rotation)
 
         prune_filter = torch.cat((selected_pts_mask, torch.zeros(N * selected_pts_mask.sum(), device="cuda", dtype=bool)))
@@ -123,7 +124,6 @@ class FlatGaussianModel(GaussianModel):
     
     def save_flat_faces(self, filename):
         triangles =  self.prepare_triangles()
-        print("Filename: ", filename)
         with open(filename, 'w') as f:
             for i in range(triangles.shape[0]):
                 f.write(f"v {triangles[i, 0, 0].item()} {triangles[i, 0, 1].item()} {triangles[i, 0, 2].item()}\n")
@@ -132,6 +132,7 @@ class FlatGaussianModel(GaussianModel):
 
             for i in range(triangles.shape[0]):
                 f.write(f"f {3*i+1} {3*i+2} {3*i+3}\n")
+        print(f"Saving completed. Faces available at {filename}")
     
     def calculate_loss_from_sdf(self):
         triangles =  self.prepare_triangles()
