@@ -277,7 +277,7 @@ def readNerfSyntheticInfo(path, white_background, eval, extension=".png", init_p
 
     else:
         num_pts = 100_000
-        xyz = np.random.random((num_pts, 3)) - 0.5
+        xyz = (np.random.random((num_pts, 3)) - 0.5) * 0.5
         
     shs = np.random.random((num_pts, 3)) / 255.0
     print(f"Generating random point cloud ({num_pts})...")
