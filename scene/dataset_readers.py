@@ -30,6 +30,8 @@ import torch
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../permuto_sdf/permuto_sdf_py/utils')))
 from common_utils import create_bb_for_dataset
 
+
+
 class CameraInfo(NamedTuple):
     uid: int
     R: np.array
@@ -66,6 +68,7 @@ def getNerfppNorm(cam_info):
         cam_centers.append(C2W[:3, 3:4])
 
     center, diagonal = get_center_and_diag(cam_centers)
+    
     radius = diagonal * 1.1
 
     translate = -center
@@ -194,10 +197,30 @@ def readCamerasFromTransforms(path, transformsfile, white_background, extension=
         for idx, frame in enumerate(frames):
             cam_name = os.path.join(path, frame["file_path"] + extension)
 
-            matrix = np.linalg.inv(np.array(frame["transform_matrix"]))
-            R = -np.transpose(matrix[:3,:3])
-            R[:,0] = -R[:,0]
-            T = -matrix[:3, 3] 
+            # NeRF 'transform_matrix' is a camera-to-world transform
+            c2w = np.array(frame["transform_matrix"])
+            # change from OpenGL/Blender camera axes (Y up, Z back) to COLMAP (Y down, Z forward)
+            c2w[:3, 1:3] *= -1
+         
+
+            rotation_x_90 = np.array([
+                [1, 0, 0, 0],
+                [0, 0, -1, 0],
+                [0, 1, 0, 0],
+                [0, 0, 0, 1]
+            ])
+
+            c2w = np.dot(rotation_x_90, c2w) 
+            c2w[1] *= -1  
+            c2w[2] *= -1        
+
+            # get the world-to-camera transform and set R, T
+            w2c = np.linalg.inv(c2w)
+            w2c[:3, 3] *= 0.25
+            R = np.transpose(w2c[:3,:3])  # R is stored transposed due to 'glm' in CUDA code
+            T = w2c[:3, 3]           
+            T = T
+
 
             image_path = os.path.join(path, cam_name)
             image_name = Path(cam_name).stem
@@ -220,7 +243,7 @@ def readCamerasFromTransforms(path, transformsfile, white_background, extension=
             
     return cam_infos
 
-def readNerfSyntheticInfo(path, white_background, eval, extension=".png", init_ply_from_sdf = True):
+def readNerfSyntheticInfo(path, white_background, eval, model_sdf_path, extension=".png", init_ply_from_sdf = True):
     print("Reading Training Transforms")
     train_cam_infos = readCamerasFromTransforms(path, "transforms_train.json", white_background, extension)
     print("Reading Test Transforms")
@@ -234,35 +257,34 @@ def readNerfSyntheticInfo(path, white_background, eval, extension=".png", init_p
 
     ply_path = os.path.join(path, "points3d.ply")
 
-    if os.path.exists(ply_path):
-        # Since this data set has no colmap data, we start with random points
+    if init_ply_from_sdf:
+        aabb = create_bb_for_dataset('nerf')
+        sdf = SDF(in_channels=3, boundary_primitive=aabb, geom_feat_size_out=32, nr_iters_for_c2f=10000*1.0).to("cuda")
+        sdf.load_state_dict(torch.load(model_sdf_path))
+        sdf.eval()
+        num_pts = 100_000
+        xyz = torch.tensor((np.random.random((num_pts, 3)) - 0.5) * 0.5).float().to("cuda")
+        with torch.no_grad():
+            sdf_results = sdf(xyz, 200000)[0]
+        beta = 1.0
+        numerator = torch.exp(beta * sdf_results)
+        denominator = (1 + numerator) ** 2
+        opacity = ( numerator / denominator  ) * 4
+        mask = opacity >= 0.995
+        xyz = xyz[mask.squeeze()].cpu().detach().numpy()
+        num_pts = xyz.shape[0]
 
-        if init_ply_from_sdf:
-            aabb = create_bb_for_dataset('nerf')
-            sdf = SDF(in_channels=3, boundary_primitive=aabb, geom_feat_size_out=32, nr_iters_for_c2f=10000*1.0).to("cuda")
-            sdf.load_state_dict(torch.load('/workspace/permuto_sdf/checkpoints/permuto_sdf_lego_default/200000/models/sdf_model.pt'))
-            sdf.eval()
-            num_pts = 100_000
-            xyz = torch.tensor(np.random.random((num_pts, 3)) - 0.5).float().to("cuda")
-            with torch.no_grad():
-                sdf_results = sdf(xyz, 200000)[0]
-            beta = 1.0
-            numerator = torch.exp(beta * sdf_results)
-            denominator = (1 + numerator) ** 2
-            opacity = ( numerator / denominator  ) * 4
-            mask = opacity >= 0.995
-            xyz = xyz[mask.squeeze()].cpu().detach().numpy()
-            num_pts = xyz.shape[0]
+    else:
+        num_pts = 100_000
+        xyz = (np.random.random((num_pts, 3)) - 0.5) * 0.5
+        
+    shs = np.random.random((num_pts, 3)) / 255.0
+    print(f"Generating random point cloud ({num_pts})...")
+    pcd = BasicPointCloud(points=xyz, colors=SH2RGB(shs), normals=np.zeros((num_pts, 3)))
+        
+    storePly(ply_path, xyz, SH2RGB(shs) * 255)
 
-        else:
-            num_pts = 100_000
-            xyz = np.random.random((num_pts, 3)) - 0.5
-        
-        shs = np.random.random((num_pts, 3)) / 255.0
-        print(f"Generating random point cloud ({num_pts})...")
-        pcd = BasicPointCloud(points=xyz, colors=SH2RGB(shs), normals=np.zeros((num_pts, 3)))
-        
-        storePly(ply_path, xyz, SH2RGB(shs) * 255)
+    
     try:
         pcd = fetchPly(ply_path)
     except:

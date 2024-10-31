@@ -23,6 +23,7 @@ from tqdm import tqdm
 from utils.image_utils import psnr
 from argparse import ArgumentParser, Namespace
 from arguments import ModelParams, PipelineParams, OptimizationParams
+from scene.gaussian_model import GaussianModel
 try:
     from torch.utils.tensorboard import SummaryWriter
     TENSORBOARD_FOUND = True
@@ -32,8 +33,8 @@ except ImportError:
 def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from):
     first_iter = 0
     tb_writer = prepare_output_and_logger(dataset)
-    gaussians = FlatGaussianModel(dataset.sh_degree)
-    scene = Scene(dataset, gaussians)
+    gaussians = FlatGaussianModel(dataset.sh_degree, args.model_sdf_path, args.beta)
+    scene = Scene(dataset, gaussians, model_sdf_path=args.model_sdf_path)
     gaussians.training_setup(opt)
     if checkpoint:
         (model_params, first_iter) = torch.load(checkpoint)
@@ -120,8 +121,6 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                     size_threshold = 20 if iteration > opt.opacity_reset_interval else None
                     gaussians.densify_and_prune(opt.densify_grad_threshold, 0.005, scene.cameras_extent, size_threshold)
                 
-                # if iteration % opt.opacity_reset_interval == 0 or (dataset.white_background and iteration == opt.densify_from_iter):
-                #     gaussians.reset_opacity()
 
             # Optimizer step
             if iteration < opt.iterations:
@@ -206,9 +205,17 @@ if __name__ == "__main__":
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
     parser.add_argument("--start_checkpoint", type=str, default = None)
-    parser.add_argument("--opt_sdf", type=float)
+    parser.add_argument("--opt_sdf", type=float, default=0.0)
+    parser.add_argument("--model_sdf_path", type=str)
+    parser.add_argument("--beta", type=float)
     args = parser.parse_args(sys.argv[1:])
     args.save_iterations.append(args.iterations)
+
+    if args.model_sdf_path is None:
+        raise ValueError("Missing value for the model_sdf_path parameter")
+
+    if args.beta is None:
+        raise ValueError("Missing value for the beta parameter")
     
     print("Optimizing " + args.model_path)
 

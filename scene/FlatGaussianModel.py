@@ -19,22 +19,33 @@ from utils.sh_utils import RGB2SH
 from simple_knn._C import distCUDA2
 from utils.graphics_utils import BasicPointCloud
 from scene.gaussian_model import GaussianModel
+import os
+import sys
 
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../permuto_sdf/permuto_sdf_py/models')))
+from models import SDF
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../permuto_sdf/permuto_sdf_py/utils')))
+from common_utils import create_bb_for_dataset
 
 class FlatGaussianModel(GaussianModel):
 
-    def __init__(self, sh_degree: int):
+    def __init__(self, sh_degree: int, model_sdf_path: str, beta: float):
 
-        super().__init__(sh_degree)
+        super().__init__(sh_degree, model_sdf_path, beta)
         self.eps_s0 = 1e-8
-        # self.eps_s0 = 1e-12
         self.s0 = torch.empty(0)
-        
+        self.log_eps_s0 = torch.log(torch.tensor(self.eps_s0))
 
     @property
     def get_scaling(self):
         self.s0 = torch.ones(self._scaling.shape[0], 1).cuda() * self.eps_s0
         return torch.cat([self.s0, self.scaling_activation(self._scaling[:, [-2, -1]])], dim=1)
+    
+    @property
+    def get_scaling_without_activation(self):
+        _s0 = torch.ones(self._scaling.shape[0], 1).cuda() * self.log_eps_s0
+        return torch.cat([_s0, self._scaling[:, [-2, -1]]], dim=1)
 
     def create_from_pcd(self, pcd: BasicPointCloud, spatial_lr_scale: float):
         self.spatial_lr_scale = spatial_lr_scale
@@ -51,14 +62,13 @@ class FlatGaussianModel(GaussianModel):
         rots = torch.zeros((fused_point_cloud.shape[0], 4), device="cuda")
         rots[:, 0] = 1
 
-        opacities = inverse_sigmoid(0.1 * torch.ones((fused_point_cloud.shape[0], 1), dtype=torch.float, device="cuda"))
+        # opacities = inverse_sigmoid(0.1 * torch.ones((fused_point_cloud.shape[0], 1), dtype=torch.float, device="cuda"))
 
         self._xyz = nn.Parameter(fused_point_cloud.requires_grad_(True))
         self._features_dc = nn.Parameter(features[:, :, 0:1].transpose(1, 2).contiguous().requires_grad_(True))
         self._features_rest = nn.Parameter(features[:, :, 1:].transpose(1, 2).contiguous().requires_grad_(True))
         self._scaling = nn.Parameter(scales.requires_grad_(True))
         self._rotation = nn.Parameter(rots.requires_grad_(True))
-        # self._opacity = nn.Parameter(opacities.requires_grad_(True))
         self.max_radii2D = torch.zeros((self.get_xyz.shape[0]), device="cuda")
 
     def densify_and_split(self, grads, grad_threshold, scene_extent, N=2):
@@ -82,7 +92,7 @@ class FlatGaussianModel(GaussianModel):
         new_rotation = self._rotation[selected_pts_mask].repeat(N, 1)
         new_features_dc = self._features_dc[selected_pts_mask].repeat(N, 1, 1)
         new_features_rest = self._features_rest[selected_pts_mask].repeat(N, 1, 1)
-        new_opacity = self.sdf(new_xyz, 200000)[0].repeat(N,1)
+        new_opacity = torch.zeros(new_xyz.shape[0]).repeat(N,1)
         self.densification_postfix(new_xyz, new_features_dc, new_features_rest, new_opacity, new_scaling, new_rotation)
 
         prune_filter = torch.cat((selected_pts_mask, torch.zeros(N * selected_pts_mask.sum(), device="cuda", dtype=bool)))
@@ -123,7 +133,6 @@ class FlatGaussianModel(GaussianModel):
     
     def save_flat_faces(self, filename):
         triangles =  self.prepare_triangles()
-        print("Filename: ", filename)
         with open(filename, 'w') as f:
             for i in range(triangles.shape[0]):
                 f.write(f"v {triangles[i, 0, 0].item()} {triangles[i, 0, 1].item()} {triangles[i, 0, 2].item()}\n")
@@ -132,6 +141,7 @@ class FlatGaussianModel(GaussianModel):
 
             for i in range(triangles.shape[0]):
                 f.write(f"f {3*i+1} {3*i+2} {3*i+3}\n")
+        print(f"Saving completed. Faces available at {filename}")
     
     def calculate_loss_from_sdf(self):
         triangles =  self.prepare_triangles()

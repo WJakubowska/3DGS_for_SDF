@@ -171,4 +171,4 @@ tensorboard_3d
 screenshots
 *.obj
 lego*
-badania_opt_sdf/
+results/
