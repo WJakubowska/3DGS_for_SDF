@@ -33,7 +33,7 @@ except ImportError:
 def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from):
     first_iter = 0
     tb_writer = prepare_output_and_logger(dataset)
-    gaussians = FlatGaussianModel(dataset.sh_degree, args.model_sdf_path)
+    gaussians = FlatGaussianModel(dataset.sh_degree, args.model_sdf_path, args.beta)
     scene = Scene(dataset, gaussians, model_sdf_path=args.model_sdf_path)
     gaussians.training_setup(opt)
     if checkpoint:
@@ -207,8 +207,15 @@ if __name__ == "__main__":
     parser.add_argument("--start_checkpoint", type=str, default = None)
     parser.add_argument("--opt_sdf", type=float, default=0.0)
     parser.add_argument("--model_sdf_path", type=str)
+    parser.add_argument("--beta", type=float)
     args = parser.parse_args(sys.argv[1:])
     args.save_iterations.append(args.iterations)
+
+    if args.model_sdf_path is None:
+        raise ValueError("Missing value for the model_sdf_path parameter")
+
+    if args.beta is None:
+        raise ValueError("Missing value for the beta parameter")
     
     print("Optimizing " + args.model_path)
 

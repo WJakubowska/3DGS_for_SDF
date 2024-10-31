@@ -49,12 +49,10 @@ class GaussianModel:
         self.inverse_opacity_activation = inverse_sigmoid
 
         self.rotation_activation = torch.nn.functional.normalize
-
-
-        self.beta = nn.Parameter(torch.tensor(300.00), requires_grad=True)
+        
         
 
-    def __init__(self, sh_degree : int, model_sdf_path: str):
+    def __init__(self, sh_degree : int, model_sdf_path: str, beta: float):
         self.active_sh_degree = 0
         self.max_sh_degree = sh_degree  
         self._xyz = torch.empty(0)
@@ -73,7 +71,7 @@ class GaussianModel:
         self.sdf = SDF(in_channels=3, boundary_primitive=aabb, geom_feat_size_out=32, nr_iters_for_c2f=10000*1.0).to("cuda")
         self.sdf.load_state_dict(torch.load(model_sdf_path))
         self.sdf.eval()
-        
+        self.beta = nn.Parameter(torch.tensor(beta), requires_grad=True)
         self.setup_functions()
 
     def capture(self):

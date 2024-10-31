@@ -30,9 +30,9 @@ from common_utils import create_bb_for_dataset
 
 class FlatGaussianModel(GaussianModel):
 
-    def __init__(self, sh_degree: int, model_sdf_path: str):
+    def __init__(self, sh_degree: int, model_sdf_path: str, beta: float):
 
-        super().__init__(sh_degree, model_sdf_path)
+        super().__init__(sh_degree, model_sdf_path, beta)
         self.eps_s0 = 1e-8
         self.s0 = torch.empty(0)
         self.log_eps_s0 = torch.log(torch.tensor(self.eps_s0))
