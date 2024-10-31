@@ -19,22 +19,33 @@ from utils.sh_utils import RGB2SH
 from simple_knn._C import distCUDA2
 from utils.graphics_utils import BasicPointCloud
 from scene.gaussian_model import GaussianModel
+import os
+import sys
 
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../permuto_sdf/permuto_sdf_py/models')))
+from models import SDF
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../permuto_sdf/permuto_sdf_py/utils')))
+from common_utils import create_bb_for_dataset
 
 class FlatGaussianModel(GaussianModel):
 
-    def __init__(self, sh_degree: int):
+    def __init__(self, sh_degree: int, model_sdf_path: str):
 
-        super().__init__(sh_degree)
+        super().__init__(sh_degree, model_sdf_path)
         self.eps_s0 = 1e-8
-        # self.eps_s0 = 1e-12
         self.s0 = torch.empty(0)
-        
+        self.log_eps_s0 = torch.log(torch.tensor(self.eps_s0))
 
     @property
     def get_scaling(self):
         self.s0 = torch.ones(self._scaling.shape[0], 1).cuda() * self.eps_s0
         return torch.cat([self.s0, self.scaling_activation(self._scaling[:, [-2, -1]])], dim=1)
+    
+    @property
+    def get_scaling_without_activation(self):
+        _s0 = torch.ones(self._scaling.shape[0], 1).cuda() * self.log_eps_s0
+        return torch.cat([_s0, self._scaling[:, [-2, -1]]], dim=1)
 
     def create_from_pcd(self, pcd: BasicPointCloud, spatial_lr_scale: float):
         self.spatial_lr_scale = spatial_lr_scale
@@ -51,7 +62,7 @@ class FlatGaussianModel(GaussianModel):
         rots = torch.zeros((fused_point_cloud.shape[0], 4), device="cuda")
         rots[:, 0] = 1
 
-        opacities = inverse_sigmoid(0.1 * torch.ones((fused_point_cloud.shape[0], 1), dtype=torch.float, device="cuda"))
+        # opacities = inverse_sigmoid(0.1 * torch.ones((fused_point_cloud.shape[0], 1), dtype=torch.float, device="cuda"))
 
         self._xyz = nn.Parameter(fused_point_cloud.requires_grad_(True))
         self._features_dc = nn.Parameter(features[:, :, 0:1].transpose(1, 2).contiguous().requires_grad_(True))

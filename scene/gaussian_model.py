@@ -50,14 +50,11 @@ class GaussianModel:
 
         self.rotation_activation = torch.nn.functional.normalize
 
-        aabb = create_bb_for_dataset('nerf')
-        self.sdf = SDF(in_channels=3, boundary_primitive=aabb, geom_feat_size_out=32, nr_iters_for_c2f=10000*1.0).to("cuda")
-        self.sdf.load_state_dict(torch.load('/workspace/permuto_sdf/checkpoints/permuto_sdf_lego_default/200000/models/sdf_model.pt'))
-        self.sdf.eval()
-        self.beta = nn.Parameter(torch.tensor(10.00), requires_grad=True)
+
+        self.beta = nn.Parameter(torch.tensor(300.00), requires_grad=True)
         
 
-    def __init__(self, sh_degree : int):
+    def __init__(self, sh_degree : int, model_sdf_path: str):
         self.active_sh_degree = 0
         self.max_sh_degree = sh_degree  
         self._xyz = torch.empty(0)
@@ -71,6 +68,11 @@ class GaussianModel:
         self.optimizer = None
         self.percent_dense = 0
         self.spatial_lr_scale = 0
+
+        aabb = create_bb_for_dataset('nerf')
+        self.sdf = SDF(in_channels=3, boundary_primitive=aabb, geom_feat_size_out=32, nr_iters_for_c2f=10000*1.0).to("cuda")
+        self.sdf.load_state_dict(torch.load(model_sdf_path))
+        self.sdf.eval()
         
         self.setup_functions()
 
@@ -109,6 +111,7 @@ class GaussianModel:
     @property
     def get_scaling(self):
         return self.scaling_activation(self._scaling)
+    
     
     @property
     def get_rotation(self):
@@ -202,7 +205,7 @@ class GaussianModel:
         for i in range(self._features_rest.shape[1]*self._features_rest.shape[2]):
             l.append('f_rest_{}'.format(i))
         l.append('opacity')
-        for i in range(self._scaling.shape[1]):
+        for i in range(self._scaling.shape[1]+1):
             l.append('scale_{}'.format(i))
         for i in range(self._rotation.shape[1]):
             l.append('rot_{}'.format(i))
@@ -215,8 +218,8 @@ class GaussianModel:
         normals = np.zeros_like(xyz)
         f_dc = self._features_dc.detach().transpose(1, 2).flatten(start_dim=1).contiguous().cpu().numpy()
         f_rest = self._features_rest.detach().transpose(1, 2).flatten(start_dim=1).contiguous().cpu().numpy()
-        opacities = self.sdf(self._xyz, 200000)[0].detach().cpu().numpy()
-        scale = self._scaling.detach().cpu().numpy()
+        opacities = self.get_opacity.detach().cpu().numpy()
+        scale = self.get_scaling_without_activation.detach().cpu().numpy()
         rotation = self._rotation.detach().cpu().numpy()
 
         dtype_full = [(attribute, 'f4') for attribute in self.construct_list_of_attributes()]

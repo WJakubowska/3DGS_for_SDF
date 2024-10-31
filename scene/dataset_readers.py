@@ -243,7 +243,7 @@ def readCamerasFromTransforms(path, transformsfile, white_background, extension=
             
     return cam_infos
 
-def readNerfSyntheticInfo(path, white_background, eval, extension=".png", init_ply_from_sdf = True):
+def readNerfSyntheticInfo(path, white_background, eval, model_sdf_path, extension=".png", init_ply_from_sdf = True):
     print("Reading Training Transforms")
     train_cam_infos = readCamerasFromTransforms(path, "transforms_train.json", white_background, extension)
     print("Reading Test Transforms")
@@ -260,7 +260,7 @@ def readNerfSyntheticInfo(path, white_background, eval, extension=".png", init_p
     if init_ply_from_sdf:
         aabb = create_bb_for_dataset('nerf')
         sdf = SDF(in_channels=3, boundary_primitive=aabb, geom_feat_size_out=32, nr_iters_for_c2f=10000*1.0).to("cuda")
-        sdf.load_state_dict(torch.load('/workspace/permuto_sdf/checkpoints/permuto_sdf_lego_default/200000/models/sdf_model.pt'))
+        sdf.load_state_dict(torch.load(model_sdf_path))
         sdf.eval()
         num_pts = 100_000
         xyz = torch.tensor((np.random.random((num_pts, 3)) - 0.5) * 0.5).float().to("cuda")
