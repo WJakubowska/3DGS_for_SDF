@@ -33,10 +33,7 @@ except ImportError:
 def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from):
     first_iter = 0
     tb_writer = prepare_output_and_logger(dataset)
-    if args.eps_s0: 
-        gaussians = FlatGaussianModel(dataset.sh_degree, args.model_sdf_path, args.eps_s0)
-    else:
-        gaussians = FlatGaussianModel(dataset.sh_degree, args.model_sdf_path)
+    gaussians = FlatGaussianModel(dataset.sh_degree, args.model_sdf_path)
     scene = Scene(dataset, gaussians, model_sdf_path=args.model_sdf_path)
     gaussians.training_setup(opt)
     if checkpoint:
@@ -203,7 +200,7 @@ if __name__ == "__main__":
     parser.add_argument('--port', type=int, default=6009)
     parser.add_argument('--debug_from', type=int, default=-1)
     parser.add_argument('--detect_anomaly', action='store_true', default=False)
-    parser.add_argument("--test_iterations", nargs="+", type=int, default=[5_000, 7_000, 30_000])
+    parser.add_argument("--test_iterations", nargs="+", type=int, default=[7_000, 30_000])
     parser.add_argument("--save_iterations", nargs="+", type=int, default=[7_000, 30_000])
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
