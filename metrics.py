@@ -25,12 +25,15 @@ def readImages(renders_dir, gt_dir):
     renders = []
     gts = []
     image_names = []
+    renders_dir = str(renders_dir) + "_"
     for fname in os.listdir(renders_dir):
-        render = Image.open(renders_dir / fname)
+        render = Image.open(Path(renders_dir) / fname)
         gt = Image.open(gt_dir / fname)
         renders.append(tf.to_tensor(render).unsqueeze(0)[:, :3, :, :].cuda())
         gts.append(tf.to_tensor(gt).unsqueeze(0)[:, :3, :, :].cuda())
         image_names.append(fname)
+        
+
     return renders, gts, image_names
 
 def evaluate(model_paths):
@@ -62,11 +65,14 @@ def evaluate(model_paths):
                 method_dir = test_dir / method
                 gt_dir = method_dir/ "gt"
                 renders_dir = method_dir / "renders"
+
+                print("gt_dir, renders_dir: ", gt_dir, renders_dir)
                 renders, gts, image_names = readImages(renders_dir, gt_dir)
 
                 ssims = []
                 psnrs = []
                 lpipss = []
+                print("renders: ", len(renders))
 
                 for idx in tqdm(range(len(renders)), desc="Metric evaluation progress"):
                     ssims.append(ssim(renders[idx], gts[idx]))
