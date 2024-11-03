@@ -22,6 +22,9 @@ from pathlib import Path
 from plyfile import PlyData, PlyElement
 from utils.sh_utils import SH2RGB
 from scene.gaussian_model import BasicPointCloud
+import glob
+import cv2
+import math
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../permuto_sdf/permuto_sdf_py/models')))
 from models import SDF
@@ -67,12 +70,13 @@ def getNerfppNorm(cam_info):
         C2W = np.linalg.inv(W2C)
         cam_centers.append(C2W[:3, 3:4])
 
-    center, diagonal = get_center_and_diag(cam_centers)
-    
-    radius = diagonal * 1.1
 
+    center, diagonal = get_center_and_diag(cam_centers)
+    radius = diagonal * 1.1
     translate = -center
 
+    print("Center: ", center)
+    print("radius: ", radius)
     return {"translate": translate, "radius": radius}
 
 def readColmapCameras(cam_extrinsics, cam_intrinsics, images_folder):
@@ -161,7 +165,6 @@ def readColmapSceneInfo(path, images, eval, llffhold=8):
     else:
         train_cam_infos = cam_infos
         test_cam_infos = []
-
     nerf_normalization = getNerfppNorm(train_cam_infos)
 
     ply_path = os.path.join(path, "sparse/0/points3D.ply")
@@ -188,6 +191,12 @@ def readColmapSceneInfo(path, images, eval, llffhold=8):
 
 def readCamerasFromTransforms(path, transformsfile, white_background, extension=".png"):
     cam_infos = []
+    rotation_x_90 = np.array([
+                [1, 0, 0, 0],
+                [0, 0, -1, 0],
+                [0, 1, 0, 0],
+                [0, 0, 0, 1]
+            ])
 
     with open(os.path.join(path, transformsfile)) as json_file:
         contents = json.load(json_file)
@@ -201,31 +210,18 @@ def readCamerasFromTransforms(path, transformsfile, white_background, extension=
             c2w = np.array(frame["transform_matrix"])
             # change from OpenGL/Blender camera axes (Y up, Z back) to COLMAP (Y down, Z forward)
             c2w[:3, 1:3] *= -1
-         
-
-            rotation_x_90 = np.array([
-                [1, 0, 0, 0],
-                [0, 0, -1, 0],
-                [0, 1, 0, 0],
-                [0, 0, 0, 1]
-            ])
-
             c2w = np.dot(rotation_x_90, c2w) 
             c2w[1] *= -1  
             c2w[2] *= -1        
-
             # get the world-to-camera transform and set R, T
             w2c = np.linalg.inv(c2w)
             w2c[:3, 3] *= 0.25
             R = np.transpose(w2c[:3,:3])  # R is stored transposed due to 'glm' in CUDA code
             T = w2c[:3, 3]           
-            T = T
-
 
             image_path = os.path.join(path, cam_name)
             image_name = Path(cam_name).stem
             image = Image.open(image_path)
-
             im_data = np.array(image.convert("RGBA"))
 
             bg = np.array([1,1,1]) if white_background else np.array([0, 0, 0])
@@ -243,7 +239,7 @@ def readCamerasFromTransforms(path, transformsfile, white_background, extension=
             
     return cam_infos
 
-def readNerfSyntheticInfo(path, white_background, eval, model_sdf_path, extension=".png", init_ply_from_sdf = True):
+def readNerfSyntheticInfo(path, white_background, eval, model_sdf_path, extension=".png", init_ply_from_sdf = False):
     print("Reading Training Transforms")
     train_cam_infos = readCamerasFromTransforms(path, "transforms_train.json", white_background, extension)
     print("Reading Test Transforms")
@@ -297,7 +293,157 @@ def readNerfSyntheticInfo(path, white_background, eval, model_sdf_path, extensio
                            ply_path=ply_path)
     return scene_info
 
+
+def load_K_Rt_from_P(P):
+
+    out = cv2.decomposeProjectionMatrix(P)
+    K = out[0]
+    R = out[1]
+    t = out[2]
+
+    K = K/K[2,2]
+    intrinsics = np.eye(4)
+    intrinsics[:3, :3] = K
+
+    pose = np.eye(4, dtype=np.float32)
+    pose[:3, :3] = R.transpose()
+    pose[:3,3] = (t[:3] / t[3])[:,0]
+
+    return intrinsics, pose
+
+
+def readCamerasFromDTU(instance_dir, white_background=True):
+    image_dirs = [Path(f"{instance_dir}/images"), Path(f"{instance_dir}/image")]
+    image_dir = next((dir for dir in image_dirs if dir.exists()), None)
+    if image_dir is None:
+        raise ValueError("No image directory.")
+    
+    image_paths = sorted(glob.glob(os.path.join(image_dir, "*.png")))
+    n_images = len(image_paths)
+    
+    cam_files = [Path(f"{instance_dir}/cameras.npz"), Path(f"{instance_dir}/cameras_sphere.npz")]
+    cam_file = next(file for file in cam_files if file.exists())
+    camera_dict = np.load(cam_file)
+    
+    scale_mats = [camera_dict[f'scale_mat_{idx}'].astype(np.float32) for idx in range(n_images)]
+    world_mats = [camera_dict[f'world_mat_{idx}'].astype(np.float32) for idx in range(n_images)]
+
+
+    cam_infos = []
+
+    for idx, (scale_mat, world_mat) in enumerate(zip(scale_mats, world_mats)):
+        image_path = image_paths[idx]
+        image_name = Path(image_path).stem
+        image = Image.open(image_path)
+
+        # From 2d gaussian splatting
+        P = world_mat @ scale_mat
+        P = P[:3, :4]
+        intrinsics, pose = load_K_Rt_from_P(P)
+        fx = intrinsics[0, 0]
+        fy = intrinsics[1, 1]
+        W = image.width
+        H = image.height
+        fov_x = 2 * np.arctan(W / (2 * fx)) 
+        fov_y = 2 * np.arctan(H / (2 * fy)) 
+        # theta = np.deg2rad(115)
+
+        # rotation_x_115 = np.array([
+        #     [1, 0, 0, 0],
+        #     [0, np.cos(theta), -np.sin(theta), 0],
+        #     [0, np.sin(theta), np.cos(theta), 0],
+        #     [0, 0, 0, 1]
+        # ])
+        c2w = pose
+        # c2w = pose @ rotation_x_115
+        w2c = np.linalg.inv(c2w)
+        # w2c[:3, 3] *= 0.4
+        R = np.transpose(w2c[:3,:3])  # R is stored transposed due to 'glm' in CUDA code
+        T = w2c[:3, 3] 
+
+        im_data = np.array(image.convert("RGBA"))
+        bg = np.array([1, 1, 1]) if white_background else np.array([0, 0, 0])
+        norm_data = im_data / 255.0
+        arr = norm_data[:, :, :3] * norm_data[:, :, 3:4] + bg * (1 - norm_data[:, :, 3:4])
+        image = Image.fromarray(np.array(arr * 255.0, dtype=np.byte), "RGB")
+
+        cam_infos.append(CameraInfo(uid=idx, R=R, T=T, FovY=fov_y, FovX=fov_x,
+                                     image=image, image_path=image_path,
+                                     image_name=image_name, width=image.size[0],
+                                     height=image.size[1]))
+    return cam_infos
+
+
+def readDTUSceneInfo(instance_dir, white_background, eval, model_sdf_path, init_ply_from_sdf = False):
+    print("Reading Dataset DTU Transforms")
+    cam_infos = readCamerasFromDTU(instance_dir, white_background)
+    train_cam_infos = []
+    test_cam_infos = []
+
+    for i, cam in enumerate(cam_infos):
+        if (i + 1) % 4 == 0:  
+            test_cam_infos.append(cam)
+        else:
+            train_cam_infos.append(cam)
+
+
+    if not eval:
+        train_cam_infos.extend(test_cam_infos)
+        test_cam_infos = []
+
+    nerf_normalization = getNerfppNorm(train_cam_infos)
+
+    ply_path = os.path.join(instance_dir, "points3d.ply")
+
+
+
+    if init_ply_from_sdf: 
+        aabb = create_bb_for_dataset('dtu')  
+        sdf = SDF(in_channels=3, boundary_primitive=aabb, geom_feat_size_out=32, nr_iters_for_c2f=10000 * 1.0).to("cuda")
+        sdf.load_state_dict(torch.load(model_sdf_path))
+        sdf.eval()
+
+        num_pts = 100_000
+        xyz = (np.random.random((num_pts, 3)) - 0.5) * 0.5
+        xyz = torch.tensor(xyz).float().to("cuda")
+
+        with torch.no_grad():
+            sdf_results = sdf(xyz, 200000)[0]
+        
+        beta = 1.0
+        numerator = torch.exp(beta * sdf_results)
+        denominator = (1 + numerator) ** 2
+        opacity = (numerator / denominator) * 4
+        mask = opacity >= 0.995
+        xyz = xyz[mask.squeeze()].cpu().detach().numpy()
+        num_pts = xyz.shape[0]
+    else:
+        num_pts = 100_000
+        xyz = (np.random.random((num_pts, 3)) - 0.5) * 0.5
+    
+
+    shs = np.random.random((num_pts, 3)) / 255.0
+    print(f"Generating random point cloud ({num_pts})...")
+    pcd = BasicPointCloud(points=xyz, colors=SH2RGB(shs), normals=np.zeros((num_pts, 3)))
+    
+    storePly(ply_path, xyz, SH2RGB(shs) * 255)
+
+    try:
+        pcd = fetchPly(ply_path)
+    except:
+        pcd = None
+
+
+    scene_info = SceneInfo(point_cloud=pcd,
+                           train_cameras=train_cam_infos,
+                           test_cameras=test_cam_infos,
+                           nerf_normalization=nerf_normalization,
+                           ply_path=ply_path)
+    return scene_info   
+
+
 sceneLoadTypeCallbacks = {
     "Colmap": readColmapSceneInfo,
-    "Blender" : readNerfSyntheticInfo
+    "Blender" : readNerfSyntheticInfo,
+    "DTU": readDTUSceneInfo
 }
