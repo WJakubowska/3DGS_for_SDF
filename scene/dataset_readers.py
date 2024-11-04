@@ -70,6 +70,8 @@ def getNerfppNorm(cam_info):
         C2W = np.linalg.inv(W2C)
         cam_centers.append(C2W[:3, 3:4])
 
+    print("Liczba kamer: ", len(cam_centers))
+
 
     center, diagonal = get_center_and_diag(cam_centers)
     radius = diagonal * 1.1
@@ -330,6 +332,18 @@ def readCamerasFromDTU(instance_dir, white_background=True):
 
 
     cam_infos = []
+    scene_scale_multiplier = 0.4
+    angle = np.deg2rad(115)
+    rotation_x_115 = np.array([
+            [1, 0, 0, 0],
+            [0, np.cos(angle), -np.sin(angle), 0],
+            [0, np.sin(angle), np.cos(angle), 0],
+            [0, 0, 0, 1]
+    ])
+    scaling_matrix = np.eye(4)
+    scaling_matrix[0, 0] = scene_scale_multiplier
+    scaling_matrix[1, 1] = scene_scale_multiplier
+    scaling_matrix[2, 2] = scene_scale_multiplier
 
     for idx, (scale_mat, world_mat) in enumerate(zip(scale_mats, world_mats)):
         image_path = image_paths[idx]
@@ -339,6 +353,7 @@ def readCamerasFromDTU(instance_dir, white_background=True):
         # From 2d gaussian splatting
         P = world_mat @ scale_mat
         P = P[:3, :4]
+
         intrinsics, pose = load_K_Rt_from_P(P)
         fx = intrinsics[0, 0]
         fy = intrinsics[1, 1]
@@ -346,20 +361,18 @@ def readCamerasFromDTU(instance_dir, white_background=True):
         H = image.height
         fov_x = 2 * np.arctan(W / (2 * fx)) 
         fov_y = 2 * np.arctan(H / (2 * fy)) 
-        # theta = np.deg2rad(115)
 
-        # rotation_x_115 = np.array([
-        #     [1, 0, 0, 0],
-        #     [0, np.cos(theta), -np.sin(theta), 0],
-        #     [0, np.sin(theta), np.cos(theta), 0],
-        #     [0, 0, 0, 1]
-        # ])
         c2w = pose
-        # c2w = pose @ rotation_x_115
+  
+        c2w = np.dot(rotation_x_115, c2w)        
+        # c2w = scaling_matrix @ c2w 
+        c2w = np.dot(scaling_matrix, c2w) # radius się zmienia do 1.54 z 3.85 dla data_DTU 
         w2c = np.linalg.inv(c2w)
-        # w2c[:3, 3] *= 0.4
+
+        # w2c = scaling_matrix @ w2c # tu nie zmienia radius 
+
         R = np.transpose(w2c[:3,:3])  # R is stored transposed due to 'glm' in CUDA code
-        T = w2c[:3, 3] 
+        T = w2c[:3, 3]   
 
         im_data = np.array(image.convert("RGBA"))
         bg = np.array([1, 1, 1]) if white_background else np.array([0, 0, 0])
@@ -420,6 +433,7 @@ def readDTUSceneInfo(instance_dir, white_background, eval, model_sdf_path, init_
     else:
         num_pts = 100_000
         xyz = (np.random.random((num_pts, 3)) - 0.5) * 0.5
+        print("XYZ: ", xyz.min(), xyz.max())
     
 
     shs = np.random.random((num_pts, 3)) / 255.0
