@@ -77,8 +77,10 @@ class OptimizationParams(ParamGroup):
         self.position_lr_max_steps = 30_000
         self.feature_lr = 0.0025
         self.scaling_lr = 0.005
+        self.beta_lr = 0.001
         self.rotation_lr = 0.001
-        self.percent_dense = 0.01
+        # self.percent_dense = 0.01
+        self.percent_dense = 0.001
         self.lambda_dssim = 0.2
         self.densification_interval = 100
         self.opacity_reset_interval = 3000

@@ -19,14 +19,6 @@ from utils.sh_utils import RGB2SH
 from simple_knn._C import distCUDA2
 from utils.graphics_utils import BasicPointCloud
 from scene.gaussian_model import GaussianModel
-import os
-import sys
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../permuto_sdf/permuto_sdf_py/models')))
-from models import SDF
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../permuto_sdf/permuto_sdf_py/utils')))
-from common_utils import create_bb_for_dataset
 
 class FlatGaussianModel(GaussianModel):
 
@@ -61,14 +53,14 @@ class FlatGaussianModel(GaussianModel):
         scales = torch.log(torch.sqrt(dist2))[..., None].repeat(1, 2)
         rots = torch.zeros((fused_point_cloud.shape[0], 4), device="cuda")
         rots[:, 0] = 1
-
-        # opacities = inverse_sigmoid(0.1 * torch.ones((fused_point_cloud.shape[0], 1), dtype=torch.float, device="cuda"))
-
+        
         self._xyz = nn.Parameter(fused_point_cloud.requires_grad_(True))
         self._features_dc = nn.Parameter(features[:, :, 0:1].transpose(1, 2).contiguous().requires_grad_(True))
         self._features_rest = nn.Parameter(features[:, :, 1:].transpose(1, 2).contiguous().requires_grad_(True))
         self._scaling = nn.Parameter(scales.requires_grad_(True))
         self._rotation = nn.Parameter(rots.requires_grad_(True))
+        opacities = inverse_sigmoid(self.get_opacity)
+        self._opacity = opacities
         self.max_radii2D = torch.zeros((self.get_xyz.shape[0]), device="cuda")
 
     def densify_and_split(self, grads, grad_threshold, scene_extent, N=2):
@@ -92,7 +84,8 @@ class FlatGaussianModel(GaussianModel):
         new_rotation = self._rotation[selected_pts_mask].repeat(N, 1)
         new_features_dc = self._features_dc[selected_pts_mask].repeat(N, 1, 1)
         new_features_rest = self._features_rest[selected_pts_mask].repeat(N, 1, 1)
-        new_opacity = torch.zeros(new_xyz.shape[0]).repeat(N,1)
+        new_opacity = self.get_new_opacities(new_xyz).repeat(N, 1)
+
         self.densification_postfix(new_xyz, new_features_dc, new_features_rest, new_opacity, new_scaling, new_rotation)
 
         prune_filter = torch.cat((selected_pts_mask, torch.zeros(N * selected_pts_mask.sum(), device="cuda", dtype=bool)))
@@ -151,5 +144,5 @@ class FlatGaussianModel(GaussianModel):
         with torch.no_grad():
             sdf_results = self.sdf(gaussian_center, 200000)[0]
         centroids_sum = torch.sum(torch.abs(sdf_results))
-        loss = 1/num_gaussian_center * centroids_sum
+        loss = 1 / num_gaussian_center * centroids_sum
         return loss
