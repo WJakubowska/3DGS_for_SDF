@@ -25,7 +25,7 @@ def readImages(renders_dir, gt_dir):
     renders = []
     gts = []
     image_names = []
-    renders_dir = str(renders_dir) + "_"
+
     for fname in os.listdir(renders_dir):
         render = Image.open(Path(renders_dir) / fname)
         gt = Image.open(gt_dir / fname)
