@@ -42,11 +42,9 @@ def evaluate(model_paths):
     per_view_dict = {}
     full_dict_polytopeonly = {}
     per_view_dict_polytopeonly = {}
-    print("")
 
     for scene_dir in model_paths:
         try:
-            print("Scene:", scene_dir)
             full_dict[scene_dir] = {}
             per_view_dict[scene_dir] = {}
             full_dict_polytopeonly[scene_dir] = {}
@@ -55,7 +53,6 @@ def evaluate(model_paths):
             test_dir = Path(scene_dir) / "test"
 
             for method in os.listdir(test_dir):
-                print("Method:", method)
 
                 full_dict[scene_dir][method] = {}
                 per_view_dict[scene_dir][method] = {}
@@ -65,14 +62,12 @@ def evaluate(model_paths):
                 method_dir = test_dir / method
                 gt_dir = method_dir/ "gt"
                 renders_dir = method_dir / "renders"
-
-                print("gt_dir, renders_dir: ", gt_dir, renders_dir)
                 renders, gts, image_names = readImages(renders_dir, gt_dir)
 
                 ssims = []
                 psnrs = []
                 lpipss = []
-                print("renders: ", len(renders))
+
 
                 for idx in tqdm(range(len(renders)), desc="Metric evaluation progress"):
                     ssims.append(ssim(renders[idx], gts[idx]))
@@ -106,4 +101,5 @@ if __name__ == "__main__":
     parser = ArgumentParser(description="Training script parameters")
     parser.add_argument('--model_paths', '-m', required=True, nargs="+", type=str, default=[])
     args = parser.parse_args()
+    print("Calculating metrics...")
     evaluate(args.model_paths)

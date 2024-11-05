@@ -20,6 +20,8 @@ from utils.general_utils import safe_state
 from argparse import ArgumentParser
 from arguments import ModelParams, PipelineParams, get_combined_args
 from scene.FlatGaussianModel import FlatGaussianModel
+import json
+from argparse import Namespace
 
 def render_set(model_path, name, iteration, views, gaussians, pipeline, background):
     render_path = os.path.join(model_path, name, "ours_{}".format(iteration), f"renders_")
@@ -34,10 +36,10 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
         torchvision.utils.save_image(rendering, os.path.join(render_path, '{0:05d}'.format(idx) + ".png"))
         torchvision.utils.save_image(gt, os.path.join(gts_path, '{0:05d}'.format(idx) + ".png"))
 
-def render_sets(dataset : ModelParams, iteration : int, pipeline : PipelineParams, skip_train : bool, skip_test : bool):
+def render_sets(dataset: ModelParams, iteration : int, pipeline : PipelineParams, skip_train : bool, skip_test : bool, model_sdf_path: str, beta: float):
     with torch.no_grad():
-        gaussians = FlatGaussianModel(dataset.sh_degree, "/workspace/permuto_sdf/checkpoints/permuto_sdf_materials_default/200000/models/sdf_model.pt", 200.00)
-        scene = Scene(dataset, gaussians, "/workspace/permuto_sdf/checkpoints/permuto_sdf_materials_default/200000/models/sdf_model.pt", load_iteration=iteration, shuffle=False)
+        gaussians = FlatGaussianModel(dataset.sh_degree, model_sdf_path, beta)
+        scene = Scene(dataset, gaussians, model_sdf_path, load_iteration=iteration, shuffle=False)
 
         bg_color = [1,1,1] if dataset.white_background else [0, 0, 0]
         background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
@@ -47,6 +49,9 @@ def render_sets(dataset : ModelParams, iteration : int, pipeline : PipelineParam
 
         if not skip_test:
              render_set(dataset.model_path, "test", scene.loaded_iter, scene.getTestCameras(), gaussians, pipeline, background)
+
+
+
 
 if __name__ == "__main__":
     # Set up command line argument parser
@@ -60,10 +65,17 @@ if __name__ == "__main__":
     
     args = get_combined_args(parser)
 
+    cfgfilepath = os.path.join(args.model_path , "cfg_args")
+    with open(cfgfilepath) as cfg_file:
+        cfgfile_string = cfg_file.read()
+
+    beta = vars(eval(cfgfile_string))['beta']
+    model_sdf_path = vars(eval(cfgfile_string))['model_sdf_path']
+
     print("Rendering " + args.model_path)
 
     # Initialize system state (RNG)
     safe_state(args.quiet)
     
 
-    render_sets(model.extract(args), args.iteration, pipeline.extract(args), args.skip_train, args.skip_test)
+    render_sets(model.extract(args), args.iteration, pipeline.extract(args), args.skip_train, args.skip_test, model_sdf_path, beta)

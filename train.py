@@ -32,7 +32,7 @@ except ImportError:
 
 def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from):
     first_iter = 0
-    tb_writer = prepare_output_and_logger(dataset)
+    tb_writer = prepare_output_and_logger(dataset, args.model_sdf_path, args.beta)
     gaussians = FlatGaussianModel(dataset.sh_degree, args.model_sdf_path, args.beta)
     scene = Scene(dataset, gaussians, model_sdf_path=args.model_sdf_path)
     gaussians.training_setup(opt)
@@ -133,7 +133,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 print("\n[ITER {}] Saving Checkpoint".format(iteration))
                 torch.save((gaussians.capture(), iteration), scene.model_path + "/chkpnt" + str(iteration) + ".pth")
 
-def prepare_output_and_logger(args):    
+def prepare_output_and_logger(args, model_sdf_path, beta):    
     if not args.model_path:
         if os.getenv('OAR_JOB_ID'):
             unique_str=os.getenv('OAR_JOB_ID')
@@ -142,10 +142,13 @@ def prepare_output_and_logger(args):
         args.model_path = os.path.join("./output/", unique_str[0:10])
         
     # Set up output folder
+    args_dict = vars(args).copy()
+    args_dict['model_sdf_path'] = model_sdf_path
+    args_dict['beta'] = beta
     print("Output folder: {}".format(args.model_path))
     os.makedirs(args.model_path, exist_ok = True)
     with open(os.path.join(args.model_path, "cfg_args"), 'w') as cfg_log_f:
-        cfg_log_f.write(str(Namespace(**vars(args))))
+        cfg_log_f.write(str(Namespace(**args_dict)))
 
     # Create Tensorboard writer
     tb_writer = None

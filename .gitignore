@@ -172,3 +172,7 @@ screenshots
 *.obj
 lego*
 results/
+resultsDTU/
+run_scripts.py
+create_table.py
+*.csv
