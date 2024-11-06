@@ -22,6 +22,7 @@ from pathlib import Path
 from plyfile import PlyData, PlyElement
 from utils.sh_utils import SH2RGB
 from scene.gaussian_model import BasicPointCloud
+import trimesh
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../permuto_sdf/permuto_sdf_py/models')))
 from models import SDF
@@ -243,7 +244,7 @@ def readCamerasFromTransforms(path, transformsfile, white_background, extension=
             
     return cam_infos
 
-def readNerfSyntheticInfo(path, white_background, eval, model_sdf_path, extension=".png", init_ply_from_sdf = True):
+def readNerfSyntheticInfo(path, white_background, eval, init_ply_from_sdf = False, mesh_path = None, extension=".png",):
     print("Reading Training Transforms")
     train_cam_infos = readCamerasFromTransforms(path, "transforms_train.json", white_background, extension)
     print("Reading Test Transforms")
@@ -258,21 +259,45 @@ def readNerfSyntheticInfo(path, white_background, eval, model_sdf_path, extensio
     ply_path = os.path.join(path, "points3d.ply")
 
     if init_ply_from_sdf:
-        aabb = create_bb_for_dataset('nerf')
-        sdf = SDF(in_channels=3, boundary_primitive=aabb, geom_feat_size_out=32, nr_iters_for_c2f=10000*1.0).to("cuda")
-        sdf.load_state_dict(torch.load(model_sdf_path))
-        sdf.eval()
-        num_pts = 100_000
-        xyz = torch.tensor((np.random.random((num_pts, 3)) - 0.5) * 0.5).float().to("cuda")
-        with torch.no_grad():
-            sdf_results = sdf(xyz, 200000)[0]
-        beta = 1.0
-        numerator = torch.exp(beta * sdf_results)
-        denominator = (1 + numerator) ** 2
-        opacity = ( numerator / denominator  ) * 4
-        mask = opacity >= 0.995
-        xyz = xyz[mask.squeeze()].cpu().detach().numpy()
+        # aabb = create_bb_for_dataset('nerf')
+        # sdf = SDF(in_channels=3, boundary_primitive=aabb, geom_feat_size_out=32, nr_iters_for_c2f=10000*1.0).to("cuda")
+        # sdf.load_state_dict(torch.load(model_sdf_path))
+        # sdf.eval()
+        # num_pts = 100_000
+        # xyz = torch.tensor((np.random.random((num_pts, 3)) - 0.5) * 0.5).float().to("cuda")
+        # with torch.no_grad():
+        #     sdf_results = sdf(xyz, 200000)[0]
+        # beta = 1.0
+        # numerator = torch.exp(beta * sdf_results)
+        # denominator = (1 + numerator) ** 2
+        # opacity = ( numerator / denominator  ) * 4
+        # mask = opacity >= 0.995
+        # xyz = xyz[mask.squeeze()].cpu().detach().numpy()
+
+        mesh = trimesh.load(mesh_path, force='mesh')  
+        points, _ = trimesh.sample.sample_surface(mesh, 100_000)
+        xyz = points
         num_pts = xyz.shape[0]
+
+        # min_bounds, max_bounds = mesh.bounds
+        # density = 100
+        # x = np.linspace(min_bounds[0], max_bounds[0], density)
+        # y = np.linspace(min_bounds[1], max_bounds[1], density)
+        # z = np.linspace(min_bounds[2], max_bounds[2], density)
+        # X, Y, Z = np.meshgrid(x, y, z)
+        # points = np.vstack([X.ravel(), Y.ravel(), Z.ravel()]).T
+        # points = points[mesh.contains(points)]
+        # xyz = points
+        # num_pts = xyz.shape[0]
+        # print("num pts: ", num_pts)
+
+
+        # num_samples = 100_000
+        # points = np.random.uniform(low=min_bounds, high=max_bounds, size=(num_samples, 3))
+        # points = points[mesh.contains(points)]
+        # xyz = points
+        # num_pts = xyz.shape[0]
+        print("num points: ", num_pts)
 
     else:
         num_pts = 100_000
