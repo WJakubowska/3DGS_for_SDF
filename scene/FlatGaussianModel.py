@@ -1,3 +1,4 @@
+
 #
 # Copyright (C) 2024, Gmum
 # Group of Machine Learning Research. https://gmum.net/
@@ -126,14 +127,15 @@ class FlatGaussianModel(GaussianModel):
     
     def save_flat_faces(self, filename):
         triangles =  self.prepare_triangles()
-        with open(filename, 'w') as f:
-            for i in range(triangles.shape[0]):
-                f.write(f"v {triangles[i, 0, 0].item()} {triangles[i, 0, 1].item()} {triangles[i, 0, 2].item()}\n")
-                f.write(f"v {triangles[i, 1, 0].item()} {triangles[i, 1, 1].item()} {triangles[i, 1, 2].item()}\n")
-                f.write(f"v {triangles[i, 2, 0].item()} {triangles[i, 2, 1].item()} {triangles[i, 2, 2].item()}\n")
+        vertices = triangles.reshape(-1, 3)  
+        vertices_text = "\n".join(f"v {x} {y} {z}" for x, y, z in vertices)
 
-            for i in range(triangles.shape[0]):
-                f.write(f"f {3*i+1} {3*i+2} {3*i+3}\n")
+        num_triangles = triangles.shape[0]
+        faces_indices = np.arange(1, 3 * num_triangles + 1).reshape(-1, 3)
+        faces_text = "\n".join(f"f {a} {b} {c}" for a, b, c in faces_indices)
+        
+        with open(filename, 'w') as f:
+            f.write(vertices_text + "\n" + faces_text)
         print(f"Saving completed. Faces available at {filename}")
     
     def calculate_loss_from_sdf(self):
