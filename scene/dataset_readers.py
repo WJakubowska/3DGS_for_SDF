@@ -314,7 +314,7 @@ def load_K_Rt_from_P(P):
     return intrinsics, pose
 
 
-def readCamerasFromDTU(instance_dir, white_background=True):
+def readCamerasFromDTU(instance_dir, white_background=True, with_mask = True):
     image_dirs = [Path(f"{instance_dir}/images"), Path(f"{instance_dir}/image")]
     image_dir = next((dir for dir in image_dirs if dir.exists()), None)
     if image_dir is None:
@@ -371,7 +371,7 @@ def readCamerasFromDTU(instance_dir, white_background=True):
         w2c = np.linalg.inv(c2w)
         R = np.transpose(w2c[:3,:3])  # R is stored transposed due to 'glm' in CUDA code
         T = w2c[:3, 3] 
-        with_mask = True
+        
         if with_mask:
             mask = Image.open(mask_path).convert("L") 
             mask_data = np.array(mask)
