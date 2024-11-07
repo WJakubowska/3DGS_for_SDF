@@ -22,7 +22,7 @@ class Scene:
 
     gaussians : GaussianModel
 
-    def __init__(self, args : ModelParams, gaussians : GaussianModel, model_sdf_path: str, load_iteration=None, shuffle=True, resolution_scales=[1.0]):
+    def __init__(self, args : ModelParams, gaussians : GaussianModel, model_sdf_path: str, mesh_path = None, load_iteration=None, shuffle=True, resolution_scales=[1.0]):
         """b
         :param path: Path to colmap scene main folder.
         """
@@ -50,7 +50,7 @@ class Scene:
 
         elif os.path.exists(os.path.join(args.source_path, "cameras.npz")) or os.path.exists(os.path.join(args.source_path, "cameras_sphere.npz")):
             print("Found cameras.npz file, assuming DTU data set!")
-            scene_info = sceneLoadTypeCallbacks["DTU"](args.source_path, args.white_background, args.eval, model_sdf_path)
+            scene_info = sceneLoadTypeCallbacks["DTU"](args.source_path, args.white_background, args.eval, model_sdf_path, mesh_path)
         else:
             assert False, "Could not recognize scene type!"
 

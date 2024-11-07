@@ -24,7 +24,7 @@ from utils.sh_utils import SH2RGB
 from scene.gaussian_model import BasicPointCloud
 import glob
 import cv2
-import math
+import trimesh
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../permuto_sdf/permuto_sdf_py/models')))
 from models import SDF
@@ -319,8 +319,9 @@ def readCamerasFromDTU(instance_dir, white_background=True):
     image_dir = next((dir for dir in image_dirs if dir.exists()), None)
     if image_dir is None:
         raise ValueError("No image directory.")
-    
+    mask_dir = Path(f"{instance_dir}/mask")
     image_paths = sorted(glob.glob(os.path.join(image_dir, "*.png")))
+    mask_paths = sorted(glob.glob(os.path.join(mask_dir, "*.png")))
     n_images = len(image_paths)
     
     cam_files = [Path(f"{instance_dir}/cameras.npz"), Path(f"{instance_dir}/cameras_sphere.npz")]
@@ -347,6 +348,7 @@ def readCamerasFromDTU(instance_dir, white_background=True):
 
     for idx, (scale_mat, world_mat) in enumerate(zip(scale_mats, world_mats)):
         image_path = image_paths[idx]
+        mask_path = mask_paths[idx]
         image_name = Path(image_path).stem
         image = Image.open(image_path)
 
@@ -363,22 +365,30 @@ def readCamerasFromDTU(instance_dir, white_background=True):
         fov_y = 2 * np.arctan(H / (2 * fy)) 
 
         c2w = pose
-  
+        c2w = np.dot(scaling_matrix, c2w)
         c2w = np.dot(rotation_x_115, c2w)        
-        # c2w = scaling_matrix @ c2w 
-        c2w = np.dot(scaling_matrix, c2w) # radius się zmienia do 1.54 z 3.85 dla data_DTU 
+
         w2c = np.linalg.inv(c2w)
-
-        # w2c = scaling_matrix @ w2c # tu nie zmienia radius 
-
         R = np.transpose(w2c[:3,:3])  # R is stored transposed due to 'glm' in CUDA code
-        T = w2c[:3, 3]   
-
-        im_data = np.array(image.convert("RGBA"))
-        bg = np.array([1, 1, 1]) if white_background else np.array([0, 0, 0])
-        norm_data = im_data / 255.0
-        arr = norm_data[:, :, :3] * norm_data[:, :, 3:4] + bg * (1 - norm_data[:, :, 3:4])
-        image = Image.fromarray(np.array(arr * 255.0, dtype=np.byte), "RGB")
+        T = w2c[:3, 3] 
+        with_mask = True
+        if with_mask:
+            mask = Image.open(mask_path).convert("L") 
+            mask_data = np.array(mask)
+            im_data = np.array(image.convert("RGBA"))
+            bg = np.array([1,1,1]) if white_background else np.array([0, 0, 0])
+            norm_data = im_data / 255.0
+            alpha = norm_data[:, :, 3:4]
+            arr = norm_data[:, :, :3] * alpha + bg * (1 - alpha)
+            arr[mask_data == 0] = bg
+            image = Image.fromarray(np.array(arr * 255.0, dtype=np.uint8), "RGB")
+        else:
+            image = Image.open(image_path)
+            im_data = np.array(image.convert("RGBA"))
+            bg = np.array([1,1,1]) if white_background else np.array([0, 0, 0])
+            norm_data = im_data / 255.0
+            arr = norm_data[:,:,:3] * norm_data[:, :, 3:4] + bg * (1 - norm_data[:, :, 3:4])
+            image = Image.fromarray(np.array(arr*255.0, dtype=np.byte), "RGB")
 
         cam_infos.append(CameraInfo(uid=idx, R=R, T=T, FovY=fov_y, FovX=fov_x,
                                      image=image, image_path=image_path,
@@ -387,7 +397,7 @@ def readCamerasFromDTU(instance_dir, white_background=True):
     return cam_infos
 
 
-def readDTUSceneInfo(instance_dir, white_background, eval, model_sdf_path, init_ply_from_sdf = False):
+def readDTUSceneInfo(instance_dir, white_background, eval, model_sdf_path, mesh_path):
     print("Reading Dataset DTU Transforms")
     cam_infos = readCamerasFromDTU(instance_dir, white_background)
     train_cam_infos = []
@@ -408,34 +418,29 @@ def readDTUSceneInfo(instance_dir, white_background, eval, model_sdf_path, init_
 
     ply_path = os.path.join(instance_dir, "points3d.ply")
 
+    aabb = create_bb_for_dataset('dtu')  
+    sdf = SDF(in_channels=3, boundary_primitive=aabb, geom_feat_size_out=32, nr_iters_for_c2f=10000 * 1.0).to("cuda")
+    sdf.load_state_dict(torch.load(model_sdf_path))
+    sdf.eval()
 
 
-    if init_ply_from_sdf: 
-        aabb = create_bb_for_dataset('dtu')  
-        sdf = SDF(in_channels=3, boundary_primitive=aabb, geom_feat_size_out=32, nr_iters_for_c2f=10000 * 1.0).to("cuda")
-        sdf.load_state_dict(torch.load(model_sdf_path))
-        sdf.eval()
-
-        num_pts = 100_000
-        xyz = (np.random.random((num_pts, 3)) - 0.5) * 0.5
-        xyz = torch.tensor(xyz).float().to("cuda")
-
-        with torch.no_grad():
-            sdf_results = sdf(xyz, 200000)[0]
-        
-        beta = 1.0
-        numerator = torch.exp(beta * sdf_results)
-        denominator = (1 + numerator) ** 2
-        opacity = (numerator / denominator) * 4
-        mask = opacity >= 0.995
-        xyz = xyz[mask.squeeze()].cpu().detach().numpy()
-        num_pts = xyz.shape[0]
-    else:
-        num_pts = 100_000
-        xyz = (np.random.random((num_pts, 3)) - 0.5) * 0.5
-        print("XYZ: ", xyz.min(), xyz.max())
+    num_pts = 100_000
+    mesh = trimesh.load(mesh_path, force='mesh') 
+    points, _ = trimesh.sample.sample_surface(mesh, num_pts)
+    xyz = points
     
-
+    xyz = torch.tensor(xyz).float().to("cuda")
+    with torch.no_grad():
+        sdf_results = sdf(xyz, 200000)[0]
+    beta = 300.0
+    numerator = torch.exp(beta * sdf_results)
+    denominator = (1 + numerator) ** 2
+    opacity = (numerator / denominator) * 4
+    mask = opacity >= 0.995
+    xyz = xyz[mask.squeeze()].cpu().detach().numpy()
+    num_pts = xyz.shape[0]
+    print("XYZ range: ", xyz.min(), xyz.max())
+    
     shs = np.random.random((num_pts, 3)) / 255.0
     print(f"Generating random point cloud ({num_pts})...")
     pcd = BasicPointCloud(points=xyz, colors=SH2RGB(shs), normals=np.zeros((num_pts, 3)))
