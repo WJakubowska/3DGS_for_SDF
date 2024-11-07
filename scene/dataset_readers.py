@@ -70,8 +70,6 @@ def getNerfppNorm(cam_info):
         C2W = np.linalg.inv(W2C)
         cam_centers.append(C2W[:3, 3:4])
 
-    print("Liczba kamer: ", len(cam_centers))
-
 
     center, diagonal = get_center_and_diag(cam_centers)
     radius = diagonal * 1.1
