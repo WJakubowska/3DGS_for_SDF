@@ -34,7 +34,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     first_iter = 0
     tb_writer = prepare_output_and_logger(dataset)
     gaussians = FlatGaussianModel(dataset.sh_degree, args.model_sdf_path, args.beta)
-    scene = Scene(dataset, gaussians, model_sdf_path=args.model_sdf_path)
+    scene = Scene(dataset, gaussians, model_sdf_path=args.model_sdf_path, mesh_path=args.mesh_path)
     gaussians.training_setup(opt)
     if checkpoint:
         (model_params, first_iter) = torch.load(checkpoint)
@@ -88,8 +88,9 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         # Loss
         gt_image = viewpoint_cam.original_image.cuda()
         Ll1 = l1_loss(image, gt_image)
-        loss_sdf = gaussians.calculate_loss_from_sdf()
-        loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))  + args.opt_sdf * loss_sdf
+        # loss_sdf = gaussians.calculate_loss_from_sdf()
+        loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image)) 
+        # loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))  + args.opt_sdf * loss_sdf
         loss.backward()
 
         iter_end.record()
@@ -121,6 +122,8 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                     size_threshold = 20 if iteration > opt.opacity_reset_interval else None
                     gaussians.densify_and_prune(opt.densify_grad_threshold, 0.005, scene.cameras_extent, size_threshold)
                 
+                # if iteration % opt.opacity_reset_interval == 0 or (dataset.white_background and iteration == opt.densify_from_iter):
+                #     gaussians.reset_opacity()
 
             # Optimizer step
             if iteration < opt.iterations:
@@ -184,7 +187,8 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_i
                 if tb_writer:
                     tb_writer.add_scalar(config['name'] + '/loss_viewpoint - l1_loss', l1_test, iteration)
                     tb_writer.add_scalar(config['name'] + '/loss_viewpoint - psnr', psnr_test, iteration)
-
+        print("get opacity:", scene.gaussians.get_opacity)
+        print("iteration ", iteration)
         if tb_writer:
             tb_writer.add_histogram("scene/opacity_histogram", scene.gaussians.get_opacity, iteration)
             tb_writer.add_scalar('total_points', scene.gaussians.get_xyz.shape[0], iteration)
@@ -200,14 +204,15 @@ if __name__ == "__main__":
     parser.add_argument('--port', type=int, default=6009)
     parser.add_argument('--debug_from', type=int, default=-1)
     parser.add_argument('--detect_anomaly', action='store_true', default=False)
-    parser.add_argument("--test_iterations", nargs="+", type=int, default=[7_000, 30_000])
-    parser.add_argument("--save_iterations", nargs="+", type=int, default=[7_000, 30_000])
+    parser.add_argument("--test_iterations", nargs="+", type=int, default=[2_000, 7_000, 30_000])
+    parser.add_argument("--save_iterations", nargs="+", type=int, default=[2_000,7_000, 30_000])
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
     parser.add_argument("--start_checkpoint", type=str, default = None)
     parser.add_argument("--opt_sdf", type=float, default=0.0)
     parser.add_argument("--model_sdf_path", type=str)
     parser.add_argument("--beta", type=float)
+    parser.add_argument("--mesh_path", type=str)
     args = parser.parse_args(sys.argv[1:])
     args.save_iterations.append(args.iterations)
 
@@ -216,6 +221,9 @@ if __name__ == "__main__":
 
     if args.beta is None:
         raise ValueError("Missing value for the beta parameter")
+    
+    if args.mesh_path is None:
+        raise ValueError("Missing value for the mesh_path parameter")
     
     print("Optimizing " + args.model_path)
 
