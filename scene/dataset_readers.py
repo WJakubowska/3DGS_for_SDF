@@ -77,8 +77,6 @@ def getNerfppNorm(cam_info):
     radius = diagonal * 1.1
     translate = -center
 
-    print("Center: ", center)
-    print("radius: ", radius)
     return {"translate": translate, "radius": radius}
 
 def readColmapCameras(cam_extrinsics, cam_intrinsics, images_folder):
