@@ -212,7 +212,7 @@ if __name__ == "__main__":
     parser.add_argument("--opt_sdf", type=float, default=0.0)
     parser.add_argument("--model_sdf_path", type=str)
     parser.add_argument("--beta", type=float)
-    parser.add_argument("--model_path", type=str)
+    parser.add_argument("--mesh_path", type=str)
     args = parser.parse_args(sys.argv[1:])
     args.save_iterations.append(args.iterations)
 
