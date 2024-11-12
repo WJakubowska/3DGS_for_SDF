@@ -138,6 +138,25 @@ class GaussianModel:
         with torch.no_grad():
             sdf_results = self.sdf(self._xyz, 200000)[0]
         return self.opacity_activation(self.SDF_to_opacity(sdf_results).float())
+
+    @property
+    def get_normal(self):
+        return build_rotation(self._rotation).transpose(1, 2)[:, 0]
+
+    @property
+    def get_sdf_normal(self):
+        inputs = self.get_xyz
+        outputs = self.sdf(inputs, 200000)[0]
+        grads = torch.autograd.grad(outputs=outputs, inputs=inputs, grad_outputs=torch.ones_like(outputs))[0]
+        return grads
+
+    @property
+    def get_normal_loss(self):
+        n = self.get_normal
+        sdf_n = self.get_sdf_normal
+        dot_products = torch.sum(n * sdf_n, dim=1).abs()
+        return (1 - dot_products).abs().mean()
+
     
     def get_covariance(self, scaling_modifier = 1):
         return self.covariance_activation(self.get_scaling, scaling_modifier, self._rotation)

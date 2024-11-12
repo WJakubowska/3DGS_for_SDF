@@ -32,8 +32,11 @@ except ImportError:
 
 def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from):
     first_iter = 0
-    tb_writer = prepare_output_and_logger(dataset, args.model_sdf_path, args.beta)
-    gaussians = FlatGaussianModel(dataset.sh_degree, args.model_sdf_path, args.beta)
+    tb_writer = prepare_output_and_logger(dataset, args.model_sdf_path, args.beta, args.mesh_path)
+    if args.eps_s0:
+        gaussians = FlatGaussianModel(dataset.sh_degree, args.model_sdf_path, args.beta, args.eps_s0)
+    else:
+        gaussians = FlatGaussianModel(dataset.sh_degree, args.model_sdf_path, args.beta)
     scene = Scene(dataset, gaussians, model_sdf_path=args.model_sdf_path, mesh_path=args.mesh_path)
     gaussians.training_setup(opt)
     if checkpoint:
@@ -88,9 +91,9 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         # Loss
         gt_image = viewpoint_cam.original_image.cuda()
         Ll1 = l1_loss(image, gt_image)
-        # loss_sdf = gaussians.calculate_loss_from_sdf()
-        loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image)) 
-        # loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))  + args.opt_sdf * loss_sdf
+        loss_sdf = gaussians.get_normal_loss
+        # loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image)) 
+        loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))  + args.opt_sdf * loss_sdf
         loss.backward()
 
         iter_end.record()
@@ -108,8 +111,8 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             training_report(tb_writer, iteration, Ll1, loss, l1_loss, iter_start.elapsed_time(iter_end), testing_iterations, scene, render, (pipe, background))
             if (iteration in saving_iterations):
                 file_path =  f"{scene.model_path}/{iteration}.obj"
-                if iteration == 30000:
-                    gaussians.save_flat_faces(filename=file_path)
+                # if iteration == 30000:
+                gaussians.save_flat_faces(filename=file_path)
                 print("\n[ITER {}] Saving Gaussians".format(iteration))
                 scene.save(iteration)
 
@@ -121,7 +124,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
                 if iteration > opt.densify_from_iter and iteration % opt.densification_interval == 0:
                     size_threshold = 20 if iteration > opt.opacity_reset_interval else None
-                    gaussians.densify_and_prune(opt.densify_grad_threshold, 0.005, scene.cameras_extent, size_threshold)
+                    gaussians.densify_and_prune(opt.densify_grad_threshold, 0.05, scene.cameras_extent, size_threshold)
                 
                 if iteration % opt.opacity_reset_interval == 0 or (dataset.white_background and iteration == opt.densify_from_iter):
                     gaussians.reset_opacity()
@@ -135,7 +138,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 print("\n[ITER {}] Saving Checkpoint".format(iteration))
                 torch.save((gaussians.capture(), iteration), scene.model_path + "/chkpnt" + str(iteration) + ".pth")
 
-def prepare_output_and_logger(args, model_sdf_path, beta):    
+def prepare_output_and_logger(args, model_sdf_path, beta, mesh_path):    
     if not args.model_path:
         if os.getenv('OAR_JOB_ID'):
             unique_str=os.getenv('OAR_JOB_ID')
@@ -147,6 +150,7 @@ def prepare_output_and_logger(args, model_sdf_path, beta):
     args_dict = vars(args).copy()
     args_dict['model_sdf_path'] = model_sdf_path
     args_dict['beta'] = beta
+    args_dict['mesh_path'] = mesh_path
     print("Output folder: {}".format(args.model_path))
     os.makedirs(args.model_path, exist_ok = True)
     with open(os.path.join(args.model_path, "cfg_args"), 'w') as cfg_log_f:
@@ -217,6 +221,7 @@ if __name__ == "__main__":
     parser.add_argument("--model_sdf_path", type=str)
     parser.add_argument("--beta", type=float)
     parser.add_argument("--mesh_path", type=str)
+    parser.add_argument("--eps_s0", type=float)
     args = parser.parse_args(sys.argv[1:])
     args.save_iterations.append(args.iterations)
 

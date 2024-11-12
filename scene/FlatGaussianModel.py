@@ -23,10 +23,10 @@ from scene.gaussian_model import GaussianModel
 
 class FlatGaussianModel(GaussianModel):
 
-    def __init__(self, sh_degree: int, model_sdf_path: str, beta: float):
+    def __init__(self, sh_degree: int, model_sdf_path: str, beta: float, eps_s0 = 1e-8):
 
         super().__init__(sh_degree, model_sdf_path, beta)
-        self.eps_s0 = 1e-8
+        self.eps_s0 = eps_s0
         self.s0 = torch.empty(0)
         self.log_eps_s0 = torch.log(torch.tensor(self.eps_s0))
 
@@ -138,6 +138,7 @@ class FlatGaussianModel(GaussianModel):
             f.write(vertices_text + "\n" + faces_text)
         print(f"Saving completed. Faces available at {filename}")
     
+
     def calculate_loss_from_sdf(self):
         triangles =  self.prepare_triangles()
         v1 = triangles[:, 0]
