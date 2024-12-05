@@ -240,7 +240,6 @@ class GaussianModel:
         f_dc = self._features_dc.detach().transpose(1, 2).flatten(start_dim=1).contiguous().cpu().numpy()
         f_rest = self._features_rest.detach().transpose(1, 2).flatten(start_dim=1).contiguous().cpu().numpy()
         sdf_results = self.sdf(self._xyz, 200000)[0]
-        print("sdf min", sdf_results.min(), " sdf max: ", sdf_results.max(),  " sdf mean: ", sdf_results.mean())
         opacities = self.get_opacity.detach().cpu().numpy()
         scale = self.get_scaling_without_activation.detach().cpu().numpy()
         rotation = self._rotation.detach().cpu().numpy()
