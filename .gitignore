@@ -173,5 +173,5 @@ screenshots
 lego*
 results/
 results_DTU/
-create_table.py
+results_helper/
 *.csv
