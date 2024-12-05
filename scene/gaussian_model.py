@@ -66,7 +66,6 @@ class GaussianModel:
         self.sdf = SDF(in_channels=3, boundary_primitive=aabb, geom_feat_size_out=32, nr_iters_for_c2f=10000*1.0).to("cuda")
         self.sdf.load_state_dict(torch.load(model_sdf_path))
         self.sdf.eval()
-        print("Beta is set to: ", beta)
         self.beta = nn.Parameter(torch.tensor(beta), requires_grad=True)
         self.setup_functions()
 
@@ -193,7 +192,6 @@ class GaussianModel:
         self.percent_dense = training_args.percent_dense
         self.xyz_gradient_accum = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
         self.denom = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
-        print("BETA LR: ", training_args.beta_lr)
         l = [
             {'params': [self._xyz], 'lr': training_args.position_lr_init * self.spatial_lr_scale, "name": "xyz"},
             {'params': [self._features_dc], 'lr': training_args.feature_lr, "name": "f_dc"},
