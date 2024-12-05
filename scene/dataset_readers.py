@@ -73,6 +73,7 @@ def getNerfppNorm(cam_info):
 
     center, diagonal = get_center_and_diag(cam_centers)
     radius = diagonal * 1.1
+    print("radius: ", radius)
     translate = -center
 
     return {"translate": translate, "radius": radius}
@@ -390,7 +391,7 @@ def readDTUSceneInfo(instance_dir, white_background, eval, model_sdf_path, mesh_
     test_cam_infos = []
 
     for i, cam in enumerate(cam_infos):
-        if (i + 1) % 4 == 0:  
+        if i in {8, 13, 16, 21, 26, 31, 34, 56}:
             test_cam_infos.append(cam)
         else:
             train_cam_infos.append(cam)
@@ -410,6 +411,7 @@ def readDTUSceneInfo(instance_dir, white_background, eval, model_sdf_path, mesh_
     points, _ = trimesh.sample.sample_surface(mesh, num_pts)
     xyz = points
     num_pts = xyz.shape[0]
+    print("xyz: ", xyz.min(), xyz.max())
     shs = np.random.random((num_pts, 3)) / 255.0
     print(f"Generating random point cloud ({num_pts})...")
     pcd = BasicPointCloud(points=xyz, colors=SH2RGB(shs), normals=np.zeros((num_pts, 3)))

@@ -193,7 +193,7 @@ class GaussianModel:
         self.percent_dense = training_args.percent_dense
         self.xyz_gradient_accum = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
         self.denom = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
-
+        print("BETA LR: ", training_args.beta_lr)
         l = [
             {'params': [self._xyz], 'lr': training_args.position_lr_init * self.spatial_lr_scale, "name": "xyz"},
             {'params': [self._features_dc], 'lr': training_args.feature_lr, "name": "f_dc"},
@@ -241,6 +241,8 @@ class GaussianModel:
         normals = np.zeros_like(xyz)
         f_dc = self._features_dc.detach().transpose(1, 2).flatten(start_dim=1).contiguous().cpu().numpy()
         f_rest = self._features_rest.detach().transpose(1, 2).flatten(start_dim=1).contiguous().cpu().numpy()
+        sdf_results = self.sdf(self._xyz, 200000)[0]
+        print("sdf min", sdf_results.min(), " sdf max: ", sdf_results.max(),  " sdf mean: ", sdf_results.mean())
         opacities = self.get_opacity.detach().cpu().numpy()
         scale = self.get_scaling_without_activation.detach().cpu().numpy()
         rotation = self._rotation.detach().cpu().numpy()

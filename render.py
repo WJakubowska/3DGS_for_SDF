@@ -19,7 +19,7 @@ import torchvision
 from utils.general_utils import safe_state
 from argparse import ArgumentParser
 from arguments import ModelParams, PipelineParams, get_combined_args
-from scene.FlatGaussianModel import FlatGaussianModel
+from scene.flat_gaussian_model import FlatGaussianModel
 import json
 from argparse import Namespace
 
