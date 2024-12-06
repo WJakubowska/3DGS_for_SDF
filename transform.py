@@ -1,3 +1,10 @@
+#
+# Copyright (C) 2024, Gmum
+# Group of Machine Learning Research. https://gmum.net/
+# All rights reserved.
+#
+
+
 import torch
 import torch.nn.functional as F
 import copy
