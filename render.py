@@ -19,10 +19,12 @@ import torchvision
 from utils.general_utils import safe_state
 from argparse import ArgumentParser
 from arguments import ModelParams, PipelineParams, get_combined_args
-from scene import FlatGaussianModel
+from scene.flat_gaussian_model import FlatGaussianModel
+import json
+from argparse import Namespace
 
-def render_set(gs_type, model_path, name, iteration, views, gaussians, pipeline, background):
-    render_path = os.path.join(model_path, name, "ours_{}".format(iteration), f"renders_{gs_type}")
+def render_set(model_path, name, iteration, views, gaussians, pipeline, background):
+    render_path = os.path.join(model_path, name, "ours_{}".format(iteration), f"renders")
     gts_path = os.path.join(model_path, name, "ours_{}".format(iteration), "gt")
 
     makedirs(render_path, exist_ok=True)
@@ -34,19 +36,22 @@ def render_set(gs_type, model_path, name, iteration, views, gaussians, pipeline,
         torchvision.utils.save_image(rendering, os.path.join(render_path, '{0:05d}'.format(idx) + ".png"))
         torchvision.utils.save_image(gt, os.path.join(gts_path, '{0:05d}'.format(idx) + ".png"))
 
-def render_sets(gs_type: str, dataset : ModelParams, iteration : int, pipeline : PipelineParams, skip_train : bool, skip_test : bool):
+def render_sets(dataset: ModelParams, iteration : int, pipeline : PipelineParams, skip_train : bool, skip_test : bool, model_sdf_path: str, beta: float, mesh_path: str):
     with torch.no_grad():
-        gaussians = FlatGaussianModel(dataset.sh_degree)
-        scene = Scene(dataset, gaussians, load_iteration=iteration, shuffle=False)
+        gaussians = FlatGaussianModel(dataset.sh_degree, model_sdf_path, beta)
+        scene = Scene(dataset, gaussians, mesh_path=mesh_path, model_sdf_path=model_sdf_path, load_iteration=iteration, shuffle=False)
 
         bg_color = [1,1,1] if dataset.white_background else [0, 0, 0]
         background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
 
         if not skip_train:
-             render_set(gs_type, dataset.model_path, "train", scene.loaded_iter, scene.getTrainCameras(), gaussians, pipeline, background)
+             render_set(dataset.model_path, "train", scene.loaded_iter, scene.getTrainCameras(), gaussians, pipeline, background)
 
         if not skip_test:
-             render_set(gs_type, dataset.model_path, "test", scene.loaded_iter, scene.getTestCameras(), gaussians, pipeline, background)
+             render_set(dataset.model_path, "test", scene.loaded_iter, scene.getTestCameras(), gaussians, pipeline, background)
+
+
+
 
 if __name__ == "__main__":
     # Set up command line argument parser
@@ -57,14 +62,25 @@ if __name__ == "__main__":
     parser.add_argument("--skip_train", action="store_true")
     parser.add_argument("--skip_test", action="store_true")
     parser.add_argument("--quiet", action="store_true")
+
     
     args = get_combined_args(parser)
-    gs_type = "gs_flat"
-    model.gs_type = gs_type
+
+    cfgfilepath = os.path.join(args.model_path , "cfg_args")
+    with open(cfgfilepath) as cfg_file:
+        cfgfile_string = cfg_file.read()
+
+    beta = vars(eval(cfgfile_string))['beta']
+    model_sdf_path = vars(eval(cfgfile_string))['model_sdf_path']
+    mesh_path = vars(eval(cfgfile_string))['mesh_path']
+
     print("Rendering " + args.model_path)
+
+    if args.mesh_path is None:
+        raise ValueError("Missing value for the beta parameter")
 
     # Initialize system state (RNG)
     safe_state(args.quiet)
     
 
-    render_sets(gs_type, model.extract(args), args.iteration, pipeline.extract(args), args.skip_train, args.skip_test)
+    render_sets(model.extract(args), args.iteration, pipeline.extract(args), args.skip_train, args.skip_test, model_sdf_path, beta, mesh_path)

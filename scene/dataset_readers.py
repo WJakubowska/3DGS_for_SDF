@@ -237,7 +237,7 @@ def readCamerasFromTransforms(path, transformsfile, white_background, extension=
             
     return cam_infos
 
-def readNerfSyntheticInfo(path, white_background, eval, model_sdf_path, extension=".png", init_ply_from_sdf = False):
+def readNerfSyntheticInfo(path, white_background, eval, mesh_path = None, model_sdf_path =None, init_ply_from_sdf = True, extension=".png",):
     print("Reading Training Transforms")
     train_cam_infos = readCamerasFromTransforms(path, "transforms_train.json", white_background, extension)
     print("Reading Test Transforms")
@@ -252,20 +252,9 @@ def readNerfSyntheticInfo(path, white_background, eval, model_sdf_path, extensio
     ply_path = os.path.join(path, "points3d.ply")
 
     if init_ply_from_sdf:
-        aabb = create_bb_for_dataset('nerf')
-        sdf = SDF(in_channels=3, boundary_primitive=aabb, geom_feat_size_out=32, nr_iters_for_c2f=10000*1.0).to("cuda")
-        sdf.load_state_dict(torch.load(model_sdf_path))
-        sdf.eval()
-        num_pts = 100_000
-        xyz = torch.tensor((np.random.random((num_pts, 3)) - 0.5) * 0.5).float().to("cuda")
-        with torch.no_grad():
-            sdf_results = sdf(xyz, 200000)[0]
-        beta = 1.0
-        numerator = torch.exp(beta * sdf_results)
-        denominator = (1 + numerator) ** 2
-        opacity = ( numerator / denominator  ) * 4
-        mask = opacity >= 0.995
-        xyz = xyz[mask.squeeze()].cpu().detach().numpy()
+        mesh = trimesh.load(mesh_path, force='mesh')  
+        points, _ = trimesh.sample.sample_surface(mesh, 100_000)
+        xyz = points
         num_pts = xyz.shape[0]
 
     else:
@@ -315,6 +304,7 @@ def readCamerasFromDTU(instance_dir, white_background=True, with_mask = True):
     image_dir = next((dir for dir in image_dirs if dir.exists()), None)
     if image_dir is None:
         raise ValueError("No image directory.")
+    
     mask_dir = Path(f"{instance_dir}/mask")
     image_paths = sorted(glob.glob(os.path.join(image_dir, "*.png")))
     mask_paths = sorted(glob.glob(os.path.join(mask_dir, "*.png")))
@@ -400,7 +390,7 @@ def readDTUSceneInfo(instance_dir, white_background, eval, model_sdf_path, mesh_
     test_cam_infos = []
 
     for i, cam in enumerate(cam_infos):
-        if (i + 1) % 4 == 0:  
+        if i in {8, 13, 16, 21, 26, 31, 34, 56}:
             test_cam_infos.append(cam)
         else:
             train_cam_infos.append(cam)
@@ -414,29 +404,13 @@ def readDTUSceneInfo(instance_dir, white_background, eval, model_sdf_path, mesh_
 
     ply_path = os.path.join(instance_dir, "points3d.ply")
 
-    aabb = create_bb_for_dataset('dtu')  
-    sdf = SDF(in_channels=3, boundary_primitive=aabb, geom_feat_size_out=32, nr_iters_for_c2f=10000 * 1.0).to("cuda")
-    sdf.load_state_dict(torch.load(model_sdf_path))
-    sdf.eval()
-
 
     num_pts = 100_000
     mesh = trimesh.load(mesh_path, force='mesh') 
     points, _ = trimesh.sample.sample_surface(mesh, num_pts)
     xyz = points
-    
-    xyz = torch.tensor(xyz).float().to("cuda")
-    with torch.no_grad():
-        sdf_results = sdf(xyz, 200000)[0]
-    beta = 300.0
-    numerator = torch.exp(beta * sdf_results)
-    denominator = (1 + numerator) ** 2
-    opacity = (numerator / denominator) * 4
-    mask = opacity >= 0.995
-    xyz = xyz[mask.squeeze()].cpu().detach().numpy()
     num_pts = xyz.shape[0]
-    print("XYZ range: ", xyz.min(), xyz.max())
-    
+    print("xyz: ", xyz.min(), xyz.max())
     shs = np.random.random((num_pts, 3)) / 255.0
     print(f"Generating random point cloud ({num_pts})...")
     pcd = BasicPointCloud(points=xyz, colors=SH2RGB(shs), normals=np.zeros((num_pts, 3)))

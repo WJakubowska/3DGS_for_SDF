@@ -25,12 +25,15 @@ def readImages(renders_dir, gt_dir):
     renders = []
     gts = []
     image_names = []
+
     for fname in os.listdir(renders_dir):
-        render = Image.open(renders_dir / fname)
+        render = Image.open(Path(renders_dir) / fname)
         gt = Image.open(gt_dir / fname)
         renders.append(tf.to_tensor(render).unsqueeze(0)[:, :3, :, :].cuda())
         gts.append(tf.to_tensor(gt).unsqueeze(0)[:, :3, :, :].cuda())
         image_names.append(fname)
+        
+
     return renders, gts, image_names
 
 def evaluate(model_paths):
@@ -39,11 +42,9 @@ def evaluate(model_paths):
     per_view_dict = {}
     full_dict_polytopeonly = {}
     per_view_dict_polytopeonly = {}
-    print("")
 
     for scene_dir in model_paths:
         try:
-            print("Scene:", scene_dir)
             full_dict[scene_dir] = {}
             per_view_dict[scene_dir] = {}
             full_dict_polytopeonly[scene_dir] = {}
@@ -52,7 +53,6 @@ def evaluate(model_paths):
             test_dir = Path(scene_dir) / "test"
 
             for method in os.listdir(test_dir):
-                print("Method:", method)
 
                 full_dict[scene_dir][method] = {}
                 per_view_dict[scene_dir][method] = {}
@@ -67,6 +67,7 @@ def evaluate(model_paths):
                 ssims = []
                 psnrs = []
                 lpipss = []
+
 
                 for idx in tqdm(range(len(renders)), desc="Metric evaluation progress"):
                     ssims.append(ssim(renders[idx], gts[idx]))
@@ -100,4 +101,5 @@ if __name__ == "__main__":
     parser = ArgumentParser(description="Training script parameters")
     parser.add_argument('--model_paths', '-m', required=True, nargs="+", type=str, default=[])
     args = parser.parse_args()
+    print("Calculating metrics...")
     evaluate(args.model_paths)
